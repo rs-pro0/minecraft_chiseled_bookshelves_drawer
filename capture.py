@@ -3,13 +3,13 @@
 from PIL import Image
 from mcrcon import MCRcon
 import numpy as np
-import cv2, pyautogui
+import cv2, pyautogui, copy
 from mss import mss
 
 
 capture_resolution = [640,480]
-blocks_x = 16*1
-blocks_y = 12*1
+blocks_x = 16*3
+blocks_y = 12*3
 
 origin_x = 0
 origin_y = 90
@@ -29,14 +29,14 @@ br=pyautogui.position()
 bounding_box={"top":tl.y,"left":tl.x,"width":br.x-tl.x,"height":br.y-tl.y}
 width = bounding_box["width"]
 height = bounding_box["height"]
+emptybits=[[0]*blocks_y for x in range(blocks_x)]
 
-skip = [int(capture_resolution[0]/blocks_x),int(capture_resolution[1]/blocks_y)]
-brightness_add = 0
+brightness_add = 60
 
 #exit()
 def getblockbits(pix, x, y):
-	xx = x*skip[0]
-	yy = y*skip[1]
+	xx = x*3
+	yy = y*2
 	bit0 = pix[xx+0][yy+0]>>7
 	bit1 = pix[xx+1][yy+0]>>7
 	bit2 = pix[xx+2][yy+0]>>7
@@ -76,10 +76,14 @@ with MCRcon("127.0.0.1", "1234") as mcr:
 	while True:
 		shot=np.array(sct.grab(bounding_box))
 		shot=increase_brightness(shot,brightness_add)
+		#cv2.imshow("a",shot)
+		#cv2.waitKey(0)
 		shot=cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
-		shot=cv2.resize(shot,(capture_resolution[0],capture_resolution[1]))
+		shot=cv2.resize(shot,(blocks_x*3,blocks_y*2))
+		#cv2.imshow("a",shot)
+		#cv2.waitKey(0)
 		pix=shot.T
-		blockbits = [[0]*blocks_y for x in range(blocks_x)]
+		blockbits = copy.deepcopy(emptybits)
 		function = ""
 		functions=[]
 		for x in range(blocks_x):

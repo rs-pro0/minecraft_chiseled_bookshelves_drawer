@@ -1,10 +1,10 @@
 #idea and some code was taken from https://github.com/kasamikona/BadAppleBookshelf/
 
-from PIL import Image
 from mcrcon import MCRcon
 import numpy as np
 import cv2, pyautogui, copy
 from mss import mss
+import threading
 
 
 capture_resolution = [640,480]
@@ -14,7 +14,7 @@ blocks_y = 12*3
 origin_x = 0
 origin_y = 90
 origin_z = 0
-
+thread_count=8#100
 view_distance = 8.7 
 
 startbits = 0
@@ -70,29 +70,47 @@ def increase_brightness(img, value=30):
     img = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
     return img
 
-with MCRcon("127.0.0.1", "1234") as mcr:
-	mcr.command("fill {} {} {} {} {} {} {} replace".format(origin_x, origin_y, origin_z, origin_x+blocks_x-1, origin_y+blocks_y-1, origin_z, bitstostate(endbits)))
-	mcr.command("teleport @p {:.2f} {:.2f} {:.2f} 180 0".format(origin_x+(blocks_x/2), origin_y+(blocks_y/2)-1.62, origin_z+view_distance))
-	while True:
-		shot=np.array(sct.grab(bounding_box))
-		shot=increase_brightness(shot,brightness_add)
-		#cv2.imshow("a",shot)
-		#cv2.waitKey(0)
-		shot=cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
-		shot=cv2.resize(shot,(blocks_x*3,blocks_y*2))
-		#cv2.imshow("a",shot)
-		#cv2.waitKey(0)
-		pix=shot.T
-		blockbits = copy.deepcopy(emptybits)
-		function = ""
-		functions=[]
-		for x in range(blocks_x):
-			for y in range(blocks_y):
-				blockbits[x][y] = getblockbits(pix, x, y)
-				changed = (blockbits[x][y] != blockbits_last[x][y])
-				if changed:
-					mcr.command(setblock(origin_x+x, origin_y+blocks_y-1-y, origin_z, bitstostate(blockbits[x][y])))
-		blockbits_last=blockbits
+def multiple_commands(commands,mcr):
+	for i in commands:
+		mcr.command(i)
+
+
+rcon_clients=[MCRcon("127.0.0.1", "1234") for i in range(thread_count)]
+for i in rcon_clients:
+	i.connect()
+
+mcr=rcon_clients[0]
+mcr.command("fill {} {} {} {} {} {} {} replace".format(origin_x, origin_y, origin_z, origin_x+blocks_x-1, origin_y+blocks_y-1, origin_z, bitstostate(endbits)))
+mcr.command("teleport @p {:.2f} {:.2f} {:.2f} 180 0".format(origin_x+(blocks_x/2), origin_y+(blocks_y/2)-1.62, origin_z+view_distance))
+while True:
+	shot=np.array(sct.grab(bounding_box))
+	shot=increase_brightness(shot,brightness_add)
+	#cv2.imshow("a",shot)
+	#cv2.waitKey(0)
+	shot=cv2.cvtColor(shot, cv2.COLOR_BGR2GRAY)
+	shot=cv2.resize(shot,(blocks_x*3,blocks_y*2))
+	#cv2.imshow("a",shot)
+	#cv2.waitKey(0)
+	pix=shot.T
+	blockbits = copy.deepcopy(emptybits)
+	thread_args=[[] for i in range(thread_count)]
+	threads=[]
+	i=0
+	for x in range(blocks_x):
+		for y in range(blocks_y):
+			blockbits[x][y] = getblockbits(pix, x, y)
+			changed = (blockbits[x][y] != blockbits_last[x][y])
+			if changed:
+				thread_args[i%thread_count].append(setblock(origin_x+x, origin_y+blocks_y-1-y, origin_z, bitstostate(blockbits[x][y])))
+				i+=1
+	for j,i in enumerate(thread_args):
+		x = threading.Thread(target=multiple_commands, args=[i,rcon_clients[j]])
+		threads.append(x)
+		x.start()
+	for i in threads:
+		i.join()
 		
+	blockbits_last=blockbits
 		
+
 		
